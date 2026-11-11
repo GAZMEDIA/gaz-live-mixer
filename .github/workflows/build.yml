@@ -84,7 +84,7 @@ jobs:
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DPluginDir=${{ github.workspace }}\out\gaz-live-mixer" "/DAppDir=${{ github.workspace }}\desktop-app\bin\Release\net48" "/DWebView2Setup=$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe" "/DMyAppVersion=1.1.1" installer/GazLiveMixer.iss
+          & $iscc "/DPluginDir=${{ github.workspace }}\out\gaz-live-mixer" "/DAppDir=${{ github.workspace }}\desktop-app\bin\Release\net48" "/DWebView2Setup=$env:RUNNER_TEMP\MicrosoftEdgeWebview2Setup.exe" "/DMyAppVersion=1.1.2" installer/GazLiveMixer.iss
           if ($LASTEXITCODE) { exit 1 }
       - uses: actions/upload-artifact@v4
         with: { name: GazLiveMixer-installer, path: installer/output/*.exe }
@@ -110,15 +110,15 @@ jobs:
           ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.1
-          name: Gaz Live Mixer 1.1.1
+          tag_name: v1.1.2
+          name: Gaz Live Mixer 1.1.2
           make_latest: true
           files: dist/*
           body: |
             **Gaz Live Mixer** – control OBS like a video mixer from your phone or another PC.
             Gaz Media Production · Everything Multimedia
 
-            - **GazLiveMixer-Setup-1.1.1.exe** – the easy way. Run it on the OBS PC: it installs the OBS plugin, opens the firewall for your phones, and installs the Gaz Live Mixer desktop app. On a remote PC choose "Remote PC only" to install just the app.
+            - **GazLiveMixer-Setup-1.1.2.exe** – the easy way. Run it on the OBS PC: it installs the OBS plugin, opens the firewall for your phones, and installs the Gaz Live Mixer desktop app. On a remote PC choose "Remote PC only" to install just the app.
             - **GazLiveMixer-OBS-Plugin-Windows.zip** – manual install: copy the `obs-plugins` and `data` folders into `C:\Program Files\obs-studio\` (OBS 30+), restart OBS, open Docks → Gaz Live Mixer.
             - **GazLiveMixer-OBS-Script.zip** – alternative: OBS → Tools → Scripts → + → gaz_live_mixer.py (needs Python).
             - **GazLiveMixer-Android.apk** – install on your phone; it finds OBS on the Wi-Fi.

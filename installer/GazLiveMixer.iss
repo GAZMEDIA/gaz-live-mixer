@@ -75,18 +75,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\GazLiveMixer.exe"; Componen
 #ifdef WebView2Setup
 Filename: "{app}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; Components: app; Check: NeedsWebView2; Flags: nowait runhidden
 #endif
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer panel (TCP 4466)"""; Flags: runhidden; Tasks: firewall
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Gaz Live Mixer panel (TCP 4466)"" dir=in action=allow protocol=TCP localport=4466 profile=private,domain"; Flags: runhidden; Tasks: firewall; StatusMsg: "Opening the firewall for the mixer…"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer discovery (UDP 4467)"""; Flags: runhidden; Tasks: firewall
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Gaz Live Mixer discovery (UDP 4467)"" dir=in action=allow protocol=UDP localport=4467 profile=private,domain"; Flags: runhidden; Tasks: firewall
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer app"""; Flags: runhidden; Tasks: firewall; Components: app
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Gaz Live Mixer app"" dir=in action=allow program=""{app}\GazLiveMixer.exe"" profile=private,domain"; Flags: runhidden; Tasks: firewall; Components: app
+Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Gaz Live Mixer panel (TCP 4466)"" & netsh advfirewall firewall add rule name=""Gaz Live Mixer panel (TCP 4466)"" dir=in action=allow protocol=TCP localport=4466 profile=private,domain & netsh advfirewall firewall delete rule name=""Gaz Live Mixer discovery (UDP 4467)"" & netsh advfirewall firewall add rule name=""Gaz Live Mixer discovery (UDP 4467)"" dir=in action=allow protocol=UDP localport=4467 profile=private,domain"; Flags: runhidden nowait; Tasks: firewall
+Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Gaz Live Mixer app"" & netsh advfirewall firewall add rule name=""Gaz Live Mixer app"" dir=in action=allow program=""{app}\GazLiveMixer.exe"" profile=private,domain"; Flags: runhidden nowait; Tasks: firewall; Components: app
 Filename: "{app}\GazLiveMixer.exe"; Description: "Open Gaz Live Mixer now"; Components: app; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer panel (TCP 4466)"""; Flags: runhidden; RunOnceId: "fw1"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer discovery (UDP 4467)"""; Flags: runhidden; RunOnceId: "fw2"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer app"""; Flags: runhidden; RunOnceId: "fw3"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer panel (TCP 4466)"""; Flags: runhidden nowait; RunOnceId: "fw1"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer discovery (UDP 4467)"""; Flags: runhidden nowait; RunOnceId: "fw2"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer app"""; Flags: runhidden nowait; RunOnceId: "fw3"
 
 [Messages]
 WelcomeLabel2=This will install [name/ver] on your computer.%n%nGaz Live Mixer lets you control OBS Studio like a video mixer from your phone, a tablet or another PC.%n%nPlease close OBS Studio before continuing.
