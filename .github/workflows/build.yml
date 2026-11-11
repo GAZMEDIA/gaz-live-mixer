@@ -71,3 +71,36 @@ jobs:
           cmake --install build --config RelWithDebInfo --prefix out/gaz-live-mixer
       - uses: actions/upload-artifact@v4
         with: { name: GazLiveMixer-plugin-windows, path: out }
+
+  release:
+    needs: [android-apk, script-edition, plugin-linux, plugin-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: art }
+      - name: Package downloads
+        run: |
+          mkdir dist
+          cp art/GazLiveMixer-android/GazLiveMixer.apk dist/GazLiveMixer-Android.apk
+          (cd art/GazLiveMixer-obs-script && zip -qr ../../dist/GazLiveMixer-OBS-Script.zip .)
+          (cd art/GazLiveMixer-plugin-windows && zip -qr ../../dist/GazLiveMixer-OBS-Plugin-Windows.zip .)
+          (cd art/GazLiveMixer-plugin-linux && zip -qr ../../dist/GazLiveMixer-OBS-Plugin-Linux.zip .)
+          ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: Gaz Live Mixer 1.0.0
+          make_latest: true
+          files: dist/*
+          body: |
+            **Gaz Live Mixer** – control OBS like a video mixer from your phone or another PC.
+            Gaz Media Production · Everything Multimedia
+
+            - **GazLiveMixer-OBS-Plugin-Windows.zip** – copy the `obs-plugins` and `data` folders into `C:\Program Files\obs-studio\` (OBS 30+), restart OBS, open Docks → Gaz Live Mixer.
+            - **GazLiveMixer-OBS-Script.zip** – alternative: OBS → Tools → Scripts → + → gaz_live_mixer.py (needs Python).
+            - **GazLiveMixer-Android.apk** – install on your phone; it finds OBS on the Wi-Fi.
+            - Any browser works too: scan the QR code shown in OBS.
+
+            Use the plugin **or** the script, not both.
