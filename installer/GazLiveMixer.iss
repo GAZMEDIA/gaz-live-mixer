@@ -64,7 +64,7 @@ Source: "{#PluginDir}\data\obs-plugins\gaz-live-mixer\*"; DestDir: "{code:GetOBS
 ; Desktop app
 Source: "{#AppDir}\*"; DestDir: "{app}"; Components: app; Excludes: "*.pdb,*.xml"; Flags: ignoreversion recursesubdirs createallsubdirs
 #ifdef WebView2Setup
-Source: "{#WebView2Setup}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Components: app; Flags: deleteafterinstall; Check: NeedsWebView2
+Source: "{#WebView2Setup}"; DestDir: "{app}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Components: app; Flags: ignoreversion
 #endif
 
 [Icons]
@@ -73,7 +73,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\GazLiveMixer.exe"; Componen
 
 [Run]
 #ifdef WebView2Setup
-Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime…"; Components: app; Check: NeedsWebView2; Flags: waituntilterminated
+Filename: "{app}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; Components: app; Check: NeedsWebView2; Flags: nowait runhidden
 #endif
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gaz Live Mixer panel (TCP 4466)"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Gaz Live Mixer panel (TCP 4466)"" dir=in action=allow protocol=TCP localport=4466 profile=private,domain"; Flags: runhidden; Tasks: firewall; StatusMsg: "Opening the firewall for the mixer…"
@@ -126,7 +126,10 @@ var
 begin
   Result := not (
     (RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', V) and (V <> '') and (V <> '0.0.0.0')) or
-    (RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', V) and (V <> '') and (V <> '0.0.0.0')));
+    (RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', V) and (V <> '') and (V <> '0.0.0.0')) or
+    (RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', V) and (V <> '') and (V <> '0.0.0.0')) or
+    FileExists(ExpandConstant('{commonpf32}\Microsoft\EdgeWebView\Application\msedgewebview2.exe')) or
+    DirExists(ExpandConstant('{commonpf32}\Microsoft\EdgeWebView\Application')));
 end;
 
 procedure InitializeWizard();
