@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Gaz Live Mixer</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#14171c; --panel2:#1b1f26; --line:#2a303a; --text:#e8ebf0; --dim:#8b94a3;
+    --pgm:#ff3b30; --pvw:#22c55e; --arm:#f5b301; --accent:#3b82f6;
+    --tile-min:170px; --radius:12px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+  #app{display:flex;flex-direction:column;height:100%}
+
+  /* Top bar */
+  header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .brand{font-weight:800;letter-spacing:.06em;font-size:15px;white-space:nowrap}
+  .brand b{color:var(--pgm)}
+  .status{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .dot{width:9px;height:9px;border-radius:50%;background:#666;flex:none}
+  .dot.on{background:var(--pvw);box-shadow:0 0 8px var(--pvw)}
+  .dot.bad{background:var(--pgm)}
+  .spacer{flex:1}
+  .ind{white-space:nowrap;font-size:11px;font-weight:700;letter-spacing:.08em;padding:4px 7px;border-radius:6px;border:1px solid var(--line);color:var(--dim)}
+  .ind.live{background:var(--pgm);border-color:var(--pgm);color:#fff}
+  .hbtn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600}
+  .hbtn.active{background:var(--accent);border-color:var(--accent)}
+  .icon{width:36px;padding:7px 0;text-align:center;font-size:16px;line-height:1}
+
+  /* Monitors */
+  #monitors{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px 0;width:100%;max-width:calc(56vh * 16 / 9 * 2);margin:0 auto}
+  .mon{background:#000;border-radius:var(--radius);overflow:hidden;position:relative;border:3px solid var(--line)}
+  .mon.pvw{border-color:var(--pvw)} .mon.pgm{border-color:var(--pgm)} .mon.arm{border-color:var(--arm)}
+  .mon .screen{aspect-ratio:16/9;width:100%;display:block;object-fit:contain;background:#000}
+  .mon .lbl{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:center;padding:6px 9px;
+    background:linear-gradient(transparent,rgba(0,0,0,.85));font-weight:700;font-size:13px}
+  .mon .tag{font-size:10px;letter-spacing:.1em;padding:2px 6px;border-radius:4px;color:#000}
+  .mon.pvw .tag{background:var(--pvw)} .mon.pgm .tag{background:var(--pgm);color:#fff} .mon.arm .tag{background:var(--arm)}
+  .mon .nm{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .mon.flash{animation:flash .35s}
+  @keyframes flash{0%{filter:brightness(2)}100%{filter:none}}
+
+  /* Scene grid */
+  #gridWrap{flex:1;overflow:auto;padding:10px 12px;-webkit-overflow-scrolling:touch}
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tile-min),1fr));gap:10px}
+  .tile{background:var(--panel);border:3px solid var(--line);border-radius:var(--radius);padding:0;overflow:hidden;text-align:left;position:relative;transition:transform .06s}
+  .tile:active{transform:scale(.97)}
+  .tile .th{aspect-ratio:16/9;background:#05060a center/cover no-repeat;position:relative;display:flex;align-items:center;justify-content:center}
+  .tile .th img{width:100%;height:100%;object-fit:cover;display:block}
+  .tile .ph{font-size:28px;font-weight:800;color:#2b313b}
+  .tile .num{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.7);border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700}
+  .tile .tag{position:absolute;top:6px;right:6px;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;letter-spacing:.1em;display:none}
+  .tile .nm{padding:8px 10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile.pvw{border-color:var(--pvw)} .tile.pvw .tag{display:block;background:var(--pvw);color:#000}
+  .tile.arm{border-color:var(--arm)} .tile.arm .tag{display:block;background:var(--arm);color:#000}
+  .tile.pgm{border-color:var(--pgm);box-shadow:0 0 0 1px var(--pgm),0 0 18px rgba(255,59,48,.35)}
+  .tile.pgm .tag{display:block;background:var(--pgm);color:#fff}
+  .tile.pgm .nm{background:var(--pgm);color:#fff}
+  .empty{color:var(--dim);text-align:center;padding:40px 16px;line-height:1.6}
+
+  /* Bottom transition bar */
+  footer{background:var(--panel);border-top:1px solid var(--line);padding:10px 12px calc(10px + var(--safe-b));display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+  #trans{display:flex;gap:6px;overflow-x:auto;flex:1 1 220px;align-items:center;scrollbar-width:none}
+  #trans::-webkit-scrollbar{display:none}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:8px 14px;white-space:nowrap;font-weight:600;font-size:13px}
+  .chip.active{background:#fff;color:#000;border-color:#fff}
+  .dur{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
+  .dur input{width:84px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px;font:inherit}
+  .take{display:flex;gap:8px;flex:0 0 auto;margin-left:auto}
+  .big{min-width:92px;border-radius:12px;border:0;font-weight:900;letter-spacing:.08em;font-size:16px;padding:14px 16px}
+  #cutBtn{background:#e8ebf0;color:#000}
+  #autoBtn{background:var(--pgm);color:#fff}
+  #autoBtn.running{animation:pulse .5s infinite alternate}
+  @keyframes pulse{to{background:#ff8a80}}
+
+  /* Settings drawer */
+  #drawer{position:fixed;inset:0;display:none;z-index:20}
+  #drawer.open{display:block}
+  #drawer .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  #drawer .sheet{position:absolute;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column}
+  .sheet header{justify-content:space-between}
+  .sheet .body{overflow:auto;padding:12px 14px 30px;flex:1;-webkit-user-select:text;user-select:text}
+  h3{margin:18px 0 8px;font-size:12px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+  h3:first-child{margin-top:4px}
+  .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .row label{flex:1}
+  .row select,.row input[type=text]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px;font:inherit}
+  .row input[type=text]{flex:1;min-width:0}
+  .scn{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line)}
+  .scn input{width:22px;height:22px;accent-color:var(--pvw);flex:none}
+  .scn .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .scn.off .n{color:var(--dim);text-decoration:line-through}
+  .mini{background:var(--panel2);border:1px solid var(--line);border-radius:7px;width:34px;height:30px;padding:0}
+  .btnrow{display:flex;gap:8px;margin:10px 0}
+  .btnrow button{flex:1}
+  .help{color:var(--dim);font-size:12px;line-height:1.6}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:11px}
+
+  #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#222831;border:1px solid var(--line);padding:10px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30;max-width:90%}
+  #toast.show{opacity:1}
+
+  body.size-s{--tile-min:120px} body.size-m{--tile-min:170px} body.size-l{--tile-min:240px}
+  body.no-monitors #monitors{display:none}
+  @media (max-width:520px){
+    .brand span,#statusTxt{display:none}
+    header{gap:7px;padding:9px 10px}
+    .hbtn{padding:7px 8px}
+    .big{min-width:78px;padding:12px}
+    #monitors{gap:8px;padding:8px 10px 0}
+    #gridWrap{padding:8px 10px}
+  }
+  @media (orientation:landscape) and (max-height:500px){
+    #monitors{grid-template-columns:1fr 1fr;max-width:60%;margin:0 auto}
+  }
+</style>
+</head>
+<body class="size-m">
+<div id="app">
+  <header>
+    <div class="brand">GAZ <b>LIVE</b> <span>MIXER</span></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Connecting…</span></div>
+    <div class="spacer"></div>
+    <span class="ind" id="indStream">ON AIR</span>
+    <span class="ind" id="indRec">REC</span>
+    <button class="hbtn" id="studioBtn" title="Studio mode (preview / program)">STUDIO</button>
+    <button class="hbtn icon" id="fsBtn" title="Full screen">⛶</button>
+    <button class="hbtn icon" id="setBtn" title="Settings">⚙</button>
+  </header>
+
+  <section id="monitors">
+    <div class="mon pvw" id="monPvw"><img class="screen" id="imgPvw" alt=""><div class="lbl"><span class="tag" id="tagPvw">PREVIEW</span><span class="nm" id="nmPvw">—</span></div></div>
+    <div class="mon pgm" id="monPgm"><img class="screen" id="imgPgm" alt=""><div class="lbl"><span class="tag">PROGRAM</span><span class="nm" id="nmPgm">—</span></div></div>
+  </section>
+
+  <div id="gridWrap"><div id="grid"></div></div>
+
+  <footer>
+    <div id="trans"></div>
+    <div class="dur" id="durBox">ms <input id="durIn" type="number" inputmode="numeric" min="50" max="20000" step="50"></div>
+    <div class="take">
+      <button class="big" id="cutBtn">CUT</button>
+      <button class="big" id="autoBtn">AUTO</button>
+    </div>
+  </footer>
+</div>
+
+<div id="drawer">
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet">
+    <header><div class="brand">SETTINGS</div><button class="hbtn" id="closeSet">Done</button></header>
+    <div class="body">
+      <h3>Scenes on my panel</h3>
+      <div class="help">Tick the scenes you want on this device's mixer. Use the arrows to reorder.</div>
+      <div class="btnrow"><button class="hbtn" id="allOn">Show all</button><button class="hbtn" id="allOff">Hide all</button></div>
+      <div id="scnList"></div>
+
+      <h3>Buttons</h3>
+      <div class="row"><label for="tapMode">Taking a scene live</label>
+        <select id="tapMode">
+          <option value="double">Tap = preview, double-tap = take</option>
+          <option value="single">Single tap takes live (Stream Deck style)</option>
+        </select></div>
+      <div class="row"><label for="takeStyle">Double-tap / single-tap uses</label>
+        <select id="takeStyle">
+          <option value="auto">Current transition (AUTO)</option>
+          <option value="cut">Hard cut (CUT)</option>
+        </select></div>
+      <div class="row"><label for="haptics">Vibrate on take</label><input type="checkbox" id="haptics"></div>
+
+      <h3>Display</h3>
+      <div class="row"><label for="tileSize">Tile size</label>
+        <select id="tileSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option></select></div>
+      <div class="row"><label for="showMon">Show preview / program monitors</label><input type="checkbox" id="showMon"></div>
+      <div class="row"><label for="showThumbs">Live scene thumbnails</label><input type="checkbox" id="showThumbs"></div>
+      <div class="row"><label for="refresh">Thumbnail refresh</label>
+        <select id="refresh"><option value="500">Fast (0.5 s)</option><option value="1000">Normal (1 s)</option><option value="2000">Slow (2 s)</option><option value="5000">Very slow (5 s)</option></select></div>
+
+      <h3>Connection</h3>
+      <div class="row"><label for="server">OBS mixer address</label><input type="text" id="server" placeholder="192.168.1.20:4466" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="help">Leave this empty when you opened the panel from the QR code or link shown in OBS.</div>
+
+      <h3>Shortcuts (remote PC)</h3>
+      <div class="help">
+        <kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd> select scene &nbsp;·&nbsp; <kbd>Shift</kbd>+number take it live<br>
+        <kbd>Space</kbd> / <kbd>Enter</kbd> AUTO &nbsp;·&nbsp; <kbd>C</kbd> CUT &nbsp;·&nbsp; <kbd>S</kbd> studio mode &nbsp;·&nbsp; <kbd>F</kbd> full screen
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- settings (per device) ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('gazmixer.'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('gazmixer.'+k, JSON.stringify(v)); }catch(e){} }
+};
+const settings = Object.assign({
+  hidden: [], order: [], tapMode: 'double', takeStyle: 'auto', haptics: true,
+  tile: 'm', monitors: true, thumbs: true, refresh: 1000, server: ''
+}, store.get('settings', {}));
+const saveSettings = () => store.set('settings', settings);
+
+/* ---------- API base ---------- */
+function apiBase(){
+  const q = new URLSearchParams(location.search).get('server');
+  let s = (q || settings.server || '').trim();
+  if (s){ if (!/^https?:\/\//.test(s)) s = 'http://' + s; return s.replace(/\/+$/, ''); }
+  if (location.protocol.startsWith('http')) return location.origin;
+  return null;
+}
+async function api(path, params){
+  const base = apiBase();
+  if (!base) throw new Error('No OBS address set');
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const r = await fetch(base + path + qs, { cache: 'no-store' });
+  if (!r.ok){ let m = 'HTTP ' + r.status; try{ m = (await r.json()).error || m; }catch(e){} throw new Error(m); }
+  return r.json();
+}
+
+/* ---------- state ---------- */
+const S = { connected:false, rev:-1, scenes:[], program:null, preview:null, studio:false,
+  transitions:[], transition:null, duration:300, streaming:false, recording:false,
+  thumbsAvailable:true, armed:null };
+let lastTap = { name:null, t:0 };
+
+/* ---------- long-poll state loop ---------- */
+let pollGen = 0;
+async function pollLoop(){
+  const gen = ++pollGen; let fails = 0;
+  while (gen === pollGen){
+    try{
+      const st = await api('/api/state', { since: S.rev, wait: 15 });
+      fails = 0;
+      if (!S.connected){ S.connected = true; setStatus(true, st.host ? ('Connected · ' + st.host) : 'Connected'); }
+      applyState(st);
+    }catch(e){
+      fails++;
+      if (S.connected || fails === 1){ S.connected = false; setStatus(false, apiBase() ? 'Reconnecting…' : 'Set the OBS address in ⚙'); renderGrid(); }
+      await sleep(Math.min(1000 * fails, 5000));
+    }
+  }
+}
+function applyState(st){
+  if (typeof st.rev === 'number') S.rev = st.rev;
+  const scenesChanged = JSON.stringify(st.scenes) !== JSON.stringify(S.scenes);
+  Object.assign(S, {
+    scenes: st.scenes || [], program: st.program, preview: st.studio ? st.preview : null, studio: !!st.studio,
+    transitions: st.transitions || [], transition: st.transition, duration: st.duration,
+    streaming: !!st.streaming, recording: !!st.recording, thumbsAvailable: st.thumbnails !== false
+  });
+  if (S.armed && (!S.scenes.includes(S.armed) || S.studio || S.armed === S.program)) S.armed = null;
+  if (scenesChanged){ renderGrid(); renderSceneList(); } else renderTally();
+  renderTop(); renderTransitions();
+}
+
+/* ---------- thumbnails ---------- */
+let thumbGen = 0;
+async function thumbLoop(){
+  const gen = ++thumbGen;
+  while (gen === thumbGen){
+    if (!S.connected || !settings.thumbs || !S.thumbsAvailable || document.hidden){ await sleep(800); continue; }
+    const names = new Set(visibleScenes());
+    if (settings.monitors){ if (S.program) names.add(S.program); const p = S.studio ? S.preview : S.armed; if (p) names.add(p); }
+    const base = apiBase(); const stamp = Date.now();
+    await Promise.all([...names].map(n => loadThumb(base + '/api/thumb?' + new URLSearchParams({ scene:n, t:stamp }), n)));
+    await sleep(settings.refresh);
+  }
+}
+const thumbURL = {};
+function loadThumb(url, name){
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => { thumbURL[name] = url; paintThumb(name); res(); };
+    img.onerror = () => res();
+    img.src = url;
+    setTimeout(res, 4000);
+  });
+}
+function paintThumb(name){
+  const url = thumbURL[name]; if (!url) return;
+  const t = tileEls.get(name);
+  if (t){ let img = t.querySelector('img'); if (!img){ img = document.createElement('img'); img.alt=''; const th = t.querySelector('.th'); th.querySelector('.ph')?.remove(); th.prepend(img); } img.src = url; }
+  if (name === S.program) $('imgPgm').src = url;
+  if (name === (S.studio ? S.preview : S.armed)) $('imgPvw').src = url;
+}
+
+/* ---------- rendering ---------- */
+function orderedScenes(){
+  const known = settings.order.filter(n => S.scenes.includes(n));
+  return known.concat(S.scenes.filter(n => !known.includes(n)));
+}
+const visibleScenes = () => orderedScenes().filter(n => !settings.hidden.includes(n));
+const tileEls = new Map();
+
+function renderGrid(){
+  const grid = $('grid'); tileEls.clear();
+  if (!S.connected){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Not connected to OBS.<br>Make sure OBS is open with the Gaz Live Mixer plugin running, and this device is on the same Wi-Fi.</div>'; return; }
+  const vis = visibleScenes();
+  if (!vis.length){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No scenes on this panel.<br>Open ⚙ Settings and tick the scenes you want.</div>'; return; }
+  grid.innerHTML = vis.map((n, i) => `
+    <button class="tile" data-i="${i}">
+      <div class="th"><span class="ph">${i < 10 ? (i + 1) % 10 : ''}</span><span class="num">${i < 10 ? (i + 1) % 10 : '·'}</span><span class="tag"></span></div>
+      <div class="nm">${esc(n)}</div>
+    </button>`).join('');
+  grid.querySelectorAll('.tile').forEach(el => { const n = vis[+el.dataset.i]; tileEls.set(n, el); el.addEventListener('click', () => onTile(n)); });
+  vis.forEach(paintThumb);
+  renderTally();
+}
+function renderTally(){
+  const pv = S.studio ? S.preview : S.armed;
+  tileEls.forEach((el, n) => {
+    const pgm = n === S.program, pvw = !pgm && S.studio && n === S.preview, arm = !pgm && !S.studio && n === S.armed;
+    el.classList.toggle('pgm', pgm); el.classList.toggle('pvw', pvw); el.classList.toggle('arm', arm);
+    el.querySelector('.tag').textContent = pgm ? 'LIVE' : pvw ? 'PVW' : arm ? 'NEXT' : '';
+  });
+  $('nmPgm').textContent = S.program || '—';
+  $('nmPvw').textContent = pv || '—';
+  $('tagPvw').textContent = S.studio ? 'PREVIEW' : 'NEXT';
+  const mon = $('monPvw'); mon.classList.toggle('pvw', S.studio); mon.classList.toggle('arm', !S.studio);
+  if (pv && thumbURL[pv]) $('imgPvw').src = thumbURL[pv]; else if (!pv) $('imgPvw').removeAttribute('src');
+  if (S.program && thumbURL[S.program]) $('imgPgm').src = thumbURL[S.program];
+}
+function renderTop(){
+  $('studioBtn').classList.toggle('active', S.studio);
+  $('indStream').classList.toggle('live', S.streaming);
+  $('indRec').classList.toggle('live', S.recording);
+}
+let transSig = '';
+function renderTransitions(){
+  const sig = JSON.stringify([S.transitions, S.transition]);
+  if (sig !== transSig){
+    transSig = sig;
+    $('trans').innerHTML = S.transitions.map((t, i) => `<button class="chip${t.name === S.transition ? ' active' : ''}" data-i="${i}">${esc(t.name)}</button>`).join('');
+    $('trans').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+      const t = S.transitions[+b.dataset.i]; S.transition = t.name; transSig=''; renderTransitions();
+      act('/api/transition', { name: t.name });
+    }));
+  }
+  const cur = S.transitions.find(t => t.name === S.transition);
+  $('durBox').style.display = cur && cur.fixed ? 'none' : '';
+  if (document.activeElement !== $('durIn')) $('durIn').value = S.duration || 300;
+}
+function setStatus(ok, txt){ $('dot').className = 'dot ' + (ok ? 'on' : 'bad'); $('statusTxt').textContent = txt; }
+
+/* ---------- actions ---------- */
+async function act(path, params){
+  try{ const st = await api(path, params); if (st && st.state) applyState(st.state); return true; }
+  catch(e){ toast(e.message); return false; }
+}
+function buzz(){
+  if (!settings.haptics) return;
+  try{ if (window.GazAndroid) window.GazAndroid.vibrate(35); else if (navigator.vibrate) navigator.vibrate(30); }catch(e){}
+}
+function flash(){ const m = $('monPgm'); m.classList.remove('flash'); void m.offsetWidth; m.classList.add('flash'); }
+
+function onTile(name){
+  const now = Date.now();
+  const dbl = lastTap.name === name && now - lastTap.t < 380;
+  lastTap = dbl ? { name:null, t:0 } : { name, t:now };
+  if (settings.tapMode === 'single' || dbl) return take(name, settings.takeStyle);
+  select(name);
+}
+function select(name){
+  if (S.studio){ S.preview = name; renderTally(); act('/api/preview', { scene: name }); }
+  else { S.armed = (S.armed === name ? null : name); renderTally(); paintThumb(name); }
+}
+function take(name, mode){
+  buzz(); flash();
+  if (!S.studio) S.armed = null;
+  S.program = name; renderTally();
+  act('/api/take', { scene: name, mode: mode || 'auto' });
+}
+function autoOrCut(mode){
+  if (S.studio){ buzz(); flash(); act(mode === 'cut' ? '/api/cut' : '/api/auto'); return; }
+  if (!S.armed){ toast('Tap a scene first, then press ' + mode.toUpperCase()); return; }
+  take(S.armed, mode);
+}
+$('autoBtn').addEventListener('click', () => autoOrCut('auto'));
+$('cutBtn').addEventListener('click', () => autoOrCut('cut'));
+$('studioBtn').addEventListener('click', () => act('/api/studio', { on: S.studio ? 0 : 1 }));
+$('durIn').addEventListener('change', e => { const v = Math.max(50, Math.min(20000, parseInt(e.target.value, 10) || 300)); act('/api/duration', { ms: v }); });
+$('fsBtn').addEventListener('click', toggleFS);
+function toggleFS(){
+  const d = document;
+  if (!d.fullscreenElement && !d.webkitFullscreenElement){ const el = d.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (()=>{})).call(el); }
+  else (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+}
+
+/* keyboard (remote PC / Bluetooth keypad) */
+document.addEventListener('keydown', e => {
+  if ($('drawer').classList.contains('open') || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  const k = e.key;
+  const digit = e.code && /^(Digit|Numpad)\d$/.test(e.code) ? e.code.slice(-1) : (/^\d$/.test(k) ? k : null);
+  if (digit !== null){
+    const idx = digit === '0' ? 9 : (+digit - 1); const n = visibleScenes()[idx];
+    if (n){ e.preventDefault(); e.shiftKey ? take(n, settings.takeStyle) : select(n); } return;
+  }
+  if (k === ' ' || k === 'Enter'){ e.preventDefault(); autoOrCut('auto'); }
+  else if (k === 'c' || k === 'C'){ autoOrCut('cut'); }
+  else if (k === 's' || k === 'S'){ $('studioBtn').click(); }
+  else if (k === 'f' || k === 'F'){ toggleFS(); }
+});
+/* Android app hooks (volume key = AUTO) */
+window.gazMixer = { auto: () => autoOrCut('auto'), cut: () => autoOrCut('cut') };
+
+/* ---------- settings drawer ---------- */
+function openSettings(){ renderSceneList(); syncSettingsUI(); $('drawer').classList.add('open'); }
+function closeSettings(){ $('drawer').classList.remove('open'); }
+$('setBtn').addEventListener('click', openSettings);
+$('closeSet').addEventListener('click', closeSettings);
+$('scrim').addEventListener('click', closeSettings);
+
+function renderSceneList(){
+  const list = orderedScenes();
+  if (!list.length){ $('scnList').innerHTML = '<div class="help" style="padding:10px 0">Scenes appear here once connected to OBS.</div>'; return; }
+  $('scnList').innerHTML = list.map((n, i) => {
+    const on = !settings.hidden.includes(n);
+    return `<div class="scn${on ? '' : ' off'}"><input type="checkbox" data-i="${i}" ${on ? 'checked' : ''}><span class="n">${esc(n)}</span>
+      <button class="mini" data-up="${i}" ${i === 0 ? 'disabled' : ''}>▲</button><button class="mini" data-dn="${i}" ${i === list.length - 1 ? 'disabled' : ''}>▼</button></div>`;
+  }).join('');
+  $('scnList').querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    const n = list[+cb.dataset.i];
+    settings.hidden = settings.hidden.filter(x => x !== n); if (!cb.checked) settings.hidden.push(n);
+    saveSettings(); renderSceneList(); renderGrid();
+  }));
+  const move = (i, d) => { const o = list.slice(); const [x] = o.splice(i, 1); o.splice(i + d, 0, x); settings.order = o; saveSettings(); renderSceneList(); renderGrid(); };
+  $('scnList').querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => move(+b.dataset.up, -1)));
+  $('scnList').querySelectorAll('[data-dn]').forEach(b => b.addEventListener('click', () => move(+b.dataset.dn, 1)));
+}
+$('allOn').addEventListener('click', () => { settings.hidden = []; saveSettings(); renderSceneList(); renderGrid(); });
+$('allOff').addEventListener('click', () => { settings.hidden = S.scenes.slice(); saveSettings(); renderSceneList(); renderGrid(); });
+
+function syncSettingsUI(){
+  $('tapMode').value = settings.tapMode; $('takeStyle').value = settings.takeStyle; $('haptics').checked = settings.haptics;
+  $('tileSize').value = settings.tile; $('showMon').checked = settings.monitors; $('showThumbs').checked = settings.thumbs;
+  $('refresh').value = String(settings.refresh); $('server').value = settings.server;
+}
+function applyLook(){
+  document.body.classList.remove('size-s', 'size-m', 'size-l'); document.body.classList.add('size-' + settings.tile);
+  document.body.classList.toggle('no-monitors', !settings.monitors);
+}
+const bind = (id, key, conv) => $(id).addEventListener('change', e => {
+  settings[key] = conv(e.target); saveSettings(); applyLook();
+  if (key === 'server'){ S.rev = -1; S.connected = false; pollLoop(); }
+});
+bind('tapMode', 'tapMode', t => t.value); bind('takeStyle', 'takeStyle', t => t.value); bind('haptics', 'haptics', t => t.checked);
+bind('tileSize', 'tile', t => t.value); bind('showMon', 'monitors', t => t.checked); bind('showThumbs', 'thumbs', t => t.checked);
+bind('refresh', 'refresh', t => +t.value); bind('server', 'server', t => t.value.trim());
+
+/* ---------- misc ---------- */
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+let toastT; function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+let wake = null;
+async function keepAwake(){ try{ if ('wakeLock' in navigator && !document.hidden) wake = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+
+applyLook(); renderGrid(); keepAwake();
+if (!apiBase()){ setStatus(false, 'Set the OBS address in ⚙'); openSettings(); }
+pollLoop(); thumbLoop();
+})();
+</script>
+</body>
+</html>

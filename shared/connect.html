@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gaz Live Mixer – Connect a phone</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0d10;color:#e8ebf0;
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .card{background:#14171c;border:1px solid #2a303a;border-radius:16px;padding:28px 32px;text-align:center;max-width:420px}
+  h1{margin:0 0 4px;font-size:20px;letter-spacing:.06em} h1 b{color:#ff3b30}
+  p{color:#8b94a3;margin:6px 0 18px}
+  .qr{background:#fff;border-radius:12px;padding:14px;display:inline-block}
+  .qr img{width:260px;height:260px;display:block;image-rendering:pixelated}
+  .url{font:600 18px ui-monospace,Consolas,monospace;margin:18px 0 6px;color:#fff;-webkit-user-select:all;user-select:all}
+  .alt{color:#8b94a3;font-size:13px}
+  a{color:#60a5fa}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>GAZ <b>LIVE</b> MIXER</h1>
+  <p>Scan with your phone's camera. Your phone must be on the same Wi-Fi as this PC.</p>
+  <div class="qr"><img id="qr" alt="QR code"></div>
+  <div class="url" id="url">…</div>
+  <div class="alt" id="alt"></div>
+  <p style="margin-top:18px">Or open <a href="/">the mixer on this PC</a>.</p>
+</div>
+<script>
+fetch('/api/info').then(r => r.json()).then(i => {
+  document.getElementById('url').textContent = i.url;
+  document.getElementById('qr').src = '/qr.svg?u=' + encodeURIComponent(i.url);
+  if (i.urls && i.urls.length > 1) document.getElementById('alt').textContent = 'Other addresses: ' + i.urls.filter(u => u !== i.url).join('  ·  ');
+}).catch(() => { document.getElementById('url').textContent = 'Could not reach the mixer server.'; });
+</script>
+</body>
+</html>

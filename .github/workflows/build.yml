@@ -1,0 +1,70 @@
+name: Build Gaz Live Mixer
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.7" }
+      - name: Build APK
+        run: gradle -p android assembleRelease --no-daemon
+      - run: cp android/app/build/outputs/apk/release/app-release.apk GazLiveMixer.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: GazLiveMixer-android, path: GazLiveMixer.apk }
+
+  script-edition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p out/gaz-live-mixer-script
+          cp obs-script/*.py shared/*.html out/gaz-live-mixer-script/
+      - uses: actions/upload-artifact@v4
+        with: { name: GazLiveMixer-obs-script, path: out }
+
+  plugin-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libobs-dev qt6-base-dev
+      - run: |
+          cmake -S obs-plugin -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j4
+          cmake --install build --prefix out
+      - uses: actions/upload-artifact@v4
+        with: { name: GazLiveMixer-plugin-linux, path: out }
+
+  # Windows: builds the OBS SDK (libobs + frontend API) from source, then the plugin.
+  # Change OBS_VERSION to match the OBS you run (30.x or newer).
+  plugin-windows:
+    runs-on: windows-2022
+    env:
+      OBS_VERSION: "30.2.3"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get OBS source
+        shell: pwsh
+        run: git clone --depth 1 --branch $env:OBS_VERSION --recurse-submodules --shallow-submodules https://github.com/obsproject/obs-studio.git obs-src
+      - name: Configure and build OBS SDK
+        shell: pwsh
+        working-directory: obs-src
+        run: |
+          cmake --preset windows-x64 -DENABLE_BROWSER=OFF -DENABLE_WEBSOCKET=OFF -DENABLE_SCRIPTING=OFF -DENABLE_VLC=OFF -DENABLE_AJA=OFF -DENABLE_NVENC=OFF -DENABLE_WEBRTC=OFF -DENABLE_VIRTUALCAM=OFF -DENABLE_UPDATER=OFF
+          cmake --build build_x64 --config RelWithDebInfo --target obs-frontend-api
+          cmake --install build_x64 --config RelWithDebInfo --component Development --prefix ${{ github.workspace }}/obs-sdk
+      - name: Build plugin
+        shell: pwsh
+        run: |
+          $deps = (Get-ChildItem obs-src/.deps -Directory | ForEach-Object { $_.FullName }) -join ';'
+          cmake -S obs-plugin -B build -G "Visual Studio 17 2022" -A x64 "-DCMAKE_PREFIX_PATH=${{ github.workspace }}/obs-sdk;$deps"
+          cmake --build build --config RelWithDebInfo
+          cmake --install build --config RelWithDebInfo --prefix out/gaz-live-mixer
+      - uses: actions/upload-artifact@v4
+        with: { name: GazLiveMixer-plugin-windows, path: out }
