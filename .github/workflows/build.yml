@@ -101,6 +101,7 @@ jobs:
         run: |
           mkdir dist
           cp art/GazLiveMixer-installer/*.exe dist/
+          cp art/GazLiveMixer-installer/*.exe dist/GazLiveMixer-Setup.exe
           cp art/GazLiveMixer-android/GazLiveMixer.apk dist/GazLiveMixer-Android.apk
           (cd art/GazLiveMixer-obs-script && zip -qr ../../dist/GazLiveMixer-OBS-Script.zip .)
           (cd art/GazLiveMixer-plugin-windows && zip -qr ../../dist/GazLiveMixer-OBS-Plugin-Windows.zip .)
