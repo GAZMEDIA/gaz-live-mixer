@@ -293,6 +293,14 @@ namespace GazLiveMixer
             web.BringToFront();
             try
             {
+                try
+                {
+                    var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+                    var loaderDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtimes", "win-" + arch, "native");
+                    if (File.Exists(Path.Combine(loaderDir, "WebView2Loader.dll")))
+                        CoreWebView2Environment.SetLoaderDllFolderPath(loaderDir);
+                }
+                catch { }
                 var env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(DataDir, "WebView2"));
                 await web.EnsureCoreWebView2Async(env);
             }

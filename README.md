@@ -24,6 +24,32 @@ Use **either** the script **or** the native plugin, not both at once, because th
 
 ---
 
+## 0. Windows installer (easiest)
+
+Download **GazLiveMixer-Setup-x.y.z.exe** from the [Releases page](https://github.com/GAZMEDIA/gaz-live-mixer/releases/latest) and run it. Close OBS first.
+
+| Install type | What you get |
+|---|---|
+| **Full** | The OBS plugin and the desktop app. Use this on the PC that runs OBS. |
+| **OBS PC only** | Just the plugin. |
+| **Remote PC only** | Just the desktop app, for a second PC that controls OBS over the network. |
+
+The installer:
+- finds your OBS folder by itself;
+- opens Windows Firewall for the mixer, so phones connect without prompts;
+- installs Microsoft WebView2 if it's missing;
+- adds Start Menu and desktop shortcuts.
+
+You can uninstall it from *Settings → Apps*.
+
+**Gaz Live Mixer desktop app:** it finds the OBS PC on your network and opens the mixer in its own window.
+
+| Key | Action |
+|---|---|
+| **F11** | Full screen |
+| **F5** | Reload |
+| **Ctrl+L** | Pick another OBS PC |
+
 ## 1. Script edition (quickest start)
 
 1. Install **Python 3.12 (64-bit)** from python.org if you don't have it. On Windows, OBS 30+ works with Python 3.8–3.12.
