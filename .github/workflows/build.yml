@@ -15,6 +15,16 @@ jobs:
         with: { distribution: temurin, java-version: "17" }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.7" }
+      - name: Get llama.cpp (pinned)
+        run: |
+          mkdir -p app/src/main/cpp/llama.cpp && cd app/src/main/cpp/llama.cpp
+          git init -q && git remote add origin https://github.com/ggml-org/llama.cpp
+          git fetch -q --depth 1 origin fe14cad51bbfb3f1cc8d9cfd9d70e98a123743d3 && git checkout -q FETCH_HEAD
+      - name: Check model downloads are reachable
+        run: |
+          for u in https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf; do
+            echo "$u"; curl -sIL "$u" | grep -iE "^HTTP|^content-length" | tail -2
+          done
       - name: Build APK
         run: gradle assembleRelease --no-daemon
       - run: cp app/build/outputs/apk/release/app-release.apk GAZ-AI.apk
@@ -23,12 +33,13 @@ jobs:
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $BT/apksigner verify --verbose GAZ-AI.apk | head -8
           $BT/aapt dump badging GAZ-AI.apk | grep -E "package:|sdkVersion|targetSdkVersion|testOnly|native-code" || true
+          unzip -l GAZ-AI.apk | grep "\.so" || true
       - uses: actions/upload-artifact@v4
         with: { name: GAZ-AI, path: GAZ-AI.apk }
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: gaz-ai-v0.3.2
-          name: "GAZ AI 0.3.2 (preview, auto-retry when Gemini is busy)"
+          tag_name: gaz-ai-v0.4.0
+          name: "GAZ AI 0.4.0 (preview, built-in offline AI)"
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}

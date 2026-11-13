@@ -2,3 +2,5 @@
 build/
 app/build/
 local.properties
+app/src/main/cpp/llama.cpp/
+app/.cxx/

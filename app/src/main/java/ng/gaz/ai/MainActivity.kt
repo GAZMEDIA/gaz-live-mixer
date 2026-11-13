@@ -35,6 +35,8 @@ import ng.gaz.ai.Ui.heading
 class MainActivity : Activity() {
 
     private lateinit var statusBox: LinearLayout
+    private lateinit var localStatus: TextView
+    private lateinit var localBtn: android.widget.Button
     private lateinit var chatsBox: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,16 +70,19 @@ class MainActivity : Activity() {
         // ---------------- Brain
         root.addView(section("AI brain (free)"))
         val brain = card()
-        val engines = listOf("Google Gemini (free, needs internet)", "My PC with Ollama (free, same Wi-Fi)")
+        val engines = listOf("Google Gemini (free, needs internet)", "Built-in AI (free, offline, on this phone)", "My PC with Ollama (free, same Wi-Fi)")
+        val engineIds = listOf("gemini", "local", "ollama")
         val geminiBox = col(0)
         val ollamaBox = col(0)
+        val localBox = col(0)
         fun showEngine() {
-            val g = Prefs.str(this, Prefs.ENGINE, "gemini") == "gemini"
-            geminiBox.visibility = if (g) android.view.View.VISIBLE else android.view.View.GONE
-            ollamaBox.visibility = if (g) android.view.View.GONE else android.view.View.VISIBLE
+            val e = Prefs.str(this, Prefs.ENGINE, "gemini")
+            geminiBox.visibility = if (e == "gemini") android.view.View.VISIBLE else android.view.View.GONE
+            localBox.visibility = if (e == "local") android.view.View.VISIBLE else android.view.View.GONE
+            ollamaBox.visibility = if (e == "ollama") android.view.View.VISIBLE else android.view.View.GONE
         }
-        brain.addView(spinner(engines, if (Prefs.str(this, Prefs.ENGINE, "gemini") == "gemini") engines[0] else engines[1]) {
-            Prefs.putStr(this, Prefs.ENGINE, if (it == 0) "gemini" else "ollama"); showEngine()
+        brain.addView(spinner(engines, engines[engineIds.indexOf(Prefs.str(this, Prefs.ENGINE, "gemini")).coerceAtLeast(0)]) {
+            Prefs.putStr(this, Prefs.ENGINE, engineIds[it]); showEngine(); refreshStatus()
         })
         geminiBox.addView(label("Gemini API key (free from Google AI Studio)"))
         geminiBox.addView(input("Paste your API key", Prefs.str(this, Prefs.API_KEY), secret = true) { Prefs.putStr(this, Prefs.API_KEY, it.trim()) })
@@ -90,6 +95,24 @@ class MainActivity : Activity() {
         ollamaBox.addView(input("192.168.1.20:11434", Prefs.str(this, Prefs.OLLAMA_URL)) { Prefs.putStr(this, Prefs.OLLAMA_URL, it.trim()) })
         ollamaBox.addView(label("Ollama model"))
         ollamaBox.addView(input("llama3.2", Prefs.str(this, Prefs.OLLAMA_MODEL, "llama3.2")) { Prefs.putStr(this, Prefs.OLLAMA_MODEL, it.trim()) })
+
+        // Built-in offline AI
+        localBox.addView(label("Runs fully on your phone: no key, no internet, no limits. Download it once."))
+        localBox.addView(label("Size"))
+        localBox.addView(spinner(LocalLlm.MODELS.map { it.label }, LocalLlm.selected(this).label) {
+            LocalLlm.select(this, LocalLlm.MODELS[it].id); drawLocal()
+        })
+        localStatus = label("")
+        localBox.addView(localStatus)
+        localBtn = button("Download", Ui.ORANGE) { downloadLocal() }
+        localBox.addView(localBtn, lp(top = 6))
+        localBox.addView(button("Delete this model (free up space)", Ui.CARD2) {
+            LocalLlm.delete(this, LocalLlm.selected(this)); drawLocal(); refreshStatus()
+        }, lp(top = 8))
+        brain.addView(localBox)
+        brain.addView(switch("If Gemini is busy or offline, use the built-in AI", Prefs.bool(this, "local_fallback", true)) {
+            Prefs.putBool(this, "local_fallback", it)
+        }, lp(top = 8))
         brain.addView(geminiBox)
         brain.addView(ollamaBox)
         val testOut = label("")
@@ -97,6 +120,7 @@ class MainActivity : Activity() {
         brain.addView(testOut)
         root.addView(brain)
         showEngine()
+        drawLocal()
 
         // ---------------- You
         root.addView(section("About you"))
@@ -205,9 +229,11 @@ class MainActivity : Activity() {
         }
         val hasBrain = when (Prefs.str(this, Prefs.ENGINE, "gemini")) {
             "ollama" -> Prefs.str(this, Prefs.OLLAMA_URL).isNotBlank()
+            "local" -> LocalLlm.anyReady(this)
             else -> Prefs.str(this, Prefs.API_KEY).isNotBlank()
         }
-        step(hasBrain, if (hasBrain) "AI brain is set up" else "Add your free Gemini API key below", null, null)
+        step(hasBrain, if (hasBrain) "AI brain is set up" else
+            if (Prefs.str(this, Prefs.ENGINE, "gemini") == "local") "Download the built-in AI below" else "Add your free Gemini API key below", null, null)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -236,9 +262,51 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun drawLocal() {
+        if (!::localStatus.isInitialized) return
+        val m = LocalLlm.selected(this)
+        when {
+            !LocalLlm.supported() -> { localStatus.text = "This phone's processor can't run the built-in AI. Use Gemini instead."; localBtn.isEnabled = false }
+            LocalLlm.downloading -> { localBtn.isEnabled = false }
+            LocalLlm.isReady(this, m) -> {
+                localStatus.setTextColor(Ui.GREEN)
+                localStatus.text = "✓ Downloaded (" + (LocalLlm.fileFor(this, m).length() / 1_000_000) + " MB). Ready to use offline."
+                localBtn.text = "Downloaded"; localBtn.isEnabled = false
+            }
+            else -> {
+                localStatus.setTextColor(Ui.DIM)
+                val part = java.io.File(LocalLlm.fileFor(this, m).path + ".part")
+                localStatus.text = if (part.exists()) "Partly downloaded (" + part.length() / 1_000_000 + " MB). Tap to continue."
+                    else "Not downloaded yet (about ${m.approxMb} MB). Use Wi-Fi if you can."
+                localBtn.text = if (part.exists()) "Continue download" else "Download (about ${m.approxMb} MB)"; localBtn.isEnabled = true
+            }
+        }
+    }
+
+    private fun downloadLocal() {
+        val m = LocalLlm.selected(this)
+        localBtn.isEnabled = false
+        localStatus.setTextColor(Ui.DIM)
+        localStatus.text = "Starting download…"
+        Thread {
+            val r = runCatching {
+                LocalLlm.download(this, m) { done, total ->
+                    runOnUiThread {
+                        localStatus.text = if (total > 0) "Downloading… ${done * 100 / total}% (${done / 1_000_000} of ${total / 1_000_000} MB). Keep GAZ AI open."
+                            else "Downloading… ${done / 1_000_000} MB"
+                    }
+                }
+            }
+            runOnUiThread {
+                r.onFailure { localStatus.setTextColor(Ui.RED); localStatus.text = (it.message ?: "Download failed") + " Tap to try again."; localBtn.isEnabled = true; localBtn.text = "Continue download" }
+                r.onSuccess { drawLocal(); refreshStatus() }
+            }
+        }.start()
+    }
+
     private fun testBrain(out: TextView) {
         out.setTextColor(Ui.DIM)
-        out.text = "Asking the AI…"
+        out.text = if (Prefs.str(this, Prefs.ENGINE, "gemini") == "local") "Starting the built-in AI (first time can take 10–30 seconds)…" else "Asking the AI…"
         val chat = Chat("test", "test", "Ada", "WhatsApp", false, null, null, System.currentTimeMillis(), "")
         val history = listOf(Msg(false, "Ada", "Hi, how was your day? Are you free this weekend?", System.currentTimeMillis()))
         Thread {

@@ -55,11 +55,36 @@ object Brain {
             append("\nWrite 3 options for my next message.")
         }
 
-        val raw = when (Prefs.str(ctx, Prefs.ENGINE, "gemini")) {
-            "ollama" -> ollama(ctx, system, convo)
-            else -> gemini(ctx, system, convo)
+        val engine = Prefs.str(ctx, Prefs.ENGINE, "gemini")
+        if (engine == "local") return local(ctx, system, convo)
+        val raw = try {
+            when (engine) {
+                "ollama" -> ollama(ctx, system, convo)
+                else -> gemini(ctx, system, convo)
+            }
+        } catch (e: Exception) {
+            // Gemini busy / no internet: use the built-in AI if it's downloaded
+            if (Prefs.bool(ctx, "local_fallback", true) && LocalLlm.anyReady(ctx) && LocalLlm.supported()) {
+                return local(ctx, system, convo)
+            }
+            if (e is BrainError) throw e
+            if (e is java.io.IOException) throw BrainError("No internet connection. Check your data, or download the built-in offline AI in GAZ AI settings.")
+            throw e
         }
         return parseReplies(raw)
+    }
+
+    /** The built-in offline AI: small models do better with a plain numbered list than JSON. */
+    private fun local(ctx: Context, system: String, convo: String): List<String> {
+        val sys = system.substringBefore("Answer only with JSON").trim() +
+            "\nWrite exactly 3 different short replies, one per line, numbered 1. 2. 3. Write nothing else."
+        val raw = LocalLlm.chat(ctx, sys, convo)
+        val lines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        var out = lines.mapNotNull { Regex("""^\(?\d[.):]\s*(.+)$""").find(it)?.groupValues?.get(1) }
+        if (out.isEmpty()) out = lines
+        out = out.map { it.trim().trim('"', '“', '”').removePrefix("Me:").trim() }.filter { it.length > 1 }.distinct()
+        if (out.isEmpty()) throw BrainError("The built-in AI gave an unclear answer. Try again.")
+        return out.take(3)
     }
 
     fun parseReplies(raw: String): List<String> {
