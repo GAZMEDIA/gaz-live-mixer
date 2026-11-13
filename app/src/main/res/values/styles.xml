@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="GazTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gaz_bg</item>
+        <item name="android:statusBarColor">@color/gaz_bg</item>
+        <item name="android:navigationBarColor">@color/gaz_bg</item>
+        <item name="android:colorAccent">@color/gaz_orange</item>
+    </style>
+    <color name="gaz_bg">#0B0D10</color>
+    <color name="gaz_orange">#FF7A1A</color>
+</resources>
