@@ -149,6 +149,12 @@ class MainActivity : Activity() {
         return flat.split(":").any { ComponentName.unflattenFromString(it) == me }
     }
 
+    private fun readerEnabled(): Boolean {
+        val flat = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
+        val me = ComponentName(this, ScreenReader::class.java)
+        return flat.split(":").any { ComponentName.unflattenFromString(it) == me }
+    }
+
     @SuppressLint("BatteryLife")
     private fun refreshStatus() {
         statusBox.removeAllViews()
@@ -167,11 +173,21 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Find GAZ AI in the list and switch it on", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
-        if (!listen && Build.VERSION.SDK_INT >= 33) {
+        if ((!listen || !readerEnabled()) && Build.VERSION.SDK_INT >= 33) {
             statusBox.addView(label("If Android says \"Restricted setting\": open App info for GAZ AI → tap ⋮ (top right) → \"Allow restricted settings\", then try again.", Ui.DIM, 13f))
             statusBox.addView(button("Open GAZ AI app info", Ui.CARD2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             }, lp(bottom = 8))
+        }
+        val reader = ScreenReader.instance != null || readerEnabled()
+        step(reader, if (reader) "Can read the chat you open (full history)" else "Let GAZ AI read the chat you open, for replies based on history",
+            "Open accessibility settings") {
+            Toast.makeText(this, "Tap Installed apps (or Downloaded apps) → GAZ AI chat reader → switch on", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        val overlay = Settings.canDrawOverlays(this)
+        step(overlay, if (overlay) "Can show the floating bubble" else "Allow the floating bubble over other apps", "Allow display over apps") {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
         if (Build.VERSION.SDK_INT >= 33) {
             val notif = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

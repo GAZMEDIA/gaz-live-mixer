@@ -41,6 +41,11 @@ class FloatService : Service() {
     private var panel: View? = null
     private lateinit var bubbleLp: WindowManager.LayoutParams
     private var index = 0
+    private var circleBg: GradientDrawable? = null
+    private var showWaiting = false
+    private var screenTone: String? = null
+    private var cache: Pair<String, List<String>>? = null   // "chatId|count|tone" -> replies
+    private var busy = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -50,7 +55,8 @@ class FloatService : Service() {
         startAsForeground()
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return }
         addBubble()
-        Engine.onPendingChanged = { refreshBadge(); if (panel != null) showPanel() }
+        Engine.onPendingChanged = { refreshBadge(); if (panel != null && (showWaiting || Engine.screenChatId == null)) showPanel() }
+        Engine.onScreenChanged = { refreshBadge(); if (panel != null) showPanel() }
         refreshBadge()
     }
 
@@ -61,6 +67,7 @@ class FloatService : Service() {
 
     override fun onDestroy() {
         Engine.onPendingChanged = null
+        Engine.onScreenChanged = null
         hidePanel()
         bubble?.let { runCatching { wm.removeView(it) } }
         bubble = null
@@ -93,9 +100,11 @@ class FloatService : Service() {
     private fun addBubble() {
         val size = dp(58)
         val f = FrameLayout(this)
+        val bg = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF0B0D10.toInt()); setStroke(dp(2), 0xFFFF7A1A.toInt()) }
+        circleBg = bg
         val circle = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher)
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF0B0D10.toInt()); setStroke(dp(2), 0xFFFF7A1A.toInt()) }
+            background = bg
             elevation = dp(6).toFloat()
         }
         f.addView(circle, FrameLayout.LayoutParams(size, size))
@@ -135,7 +144,7 @@ class FloatService : Service() {
                         wm.updateViewLayout(f, bubbleLp)
                         Prefs.putInt(this, "bubble_x", bubbleLp.x); Prefs.putInt(this, "bubble_y", bubbleLp.y)
                     } else {
-                        if (panel == null) showPanel() else hidePanel()
+                        if (panel == null) { showWaiting = false; showPanel() } else hidePanel()
                     }
                     true
                 }
@@ -147,6 +156,8 @@ class FloatService : Service() {
     }
 
     private fun refreshBadge() {
+        // Green ring = GAZ AI can see the chat you have open
+        circleBg?.setStroke(dp(3), if (Engine.screenChatId != null) 0xFF22C55E.toInt() else 0xFFFF7A1A.toInt())
         val n = Engine.pending.size
         badge?.apply { visibility = if (n > 0) View.VISIBLE else View.GONE; text = if (n > 9) "9+" else n.toString() }
     }
@@ -159,6 +170,8 @@ class FloatService : Service() {
     }
 
     private fun showPanel() {
+        val sc = Engine.screenChatId
+        if (sc != null && !showWaiting) { showScreenPanel(sc); return }
         hidePanel()
         val pend = Engine.pending.keys.toList()
         val box = LinearLayout(this).apply {
@@ -210,8 +223,98 @@ class FloatService : Service() {
             if (pend.size > 1) row.addView(pill("Next ›", 0xFF2A303A.toInt()) { index = (index + 1) % pend.size; showPanel() }, rlp())
             box.addView(row, lp(10))
         }
+        if (Engine.screenChatId != null) box.addView(pill("‹ Back to the open chat", 0xFF2A303A.toInt()) { showWaiting = false; showPanel() }, lp(6))
         box.addView(pill("Close", 0xFF000000.toInt()) { hidePanel() }.apply { gravity = Gravity.CENTER }, lp(6))
+        attachPanel(box)
+    }
 
+    /** Suggestions for the chat that is open on screen right now, based on its history. */
+    private fun showScreenPanel(chatId: String) {
+        hidePanel()
+        val chat = Db.get(this).chat(chatId) ?: return
+        val tone = screenTone ?: Engine.effectiveTone(this, chat)
+        val count = Db.get(this).count(chatId)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = GradientDrawable().apply { setColor(0xF2121418.toInt()); cornerRadius = dp(18).toFloat(); setStroke(dp(1), 0xFF2A303A.toInt()) }
+        }
+        fun lp(top: Int = 0) = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(top) }
+        box.addView(TextView(this).apply {
+            text = "THIS CHAT · ${chat.appLabel.uppercase()}"; setTextColor(0xFF22C55E.toInt()); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.08f
+        })
+        box.addView(TextView(this).apply { text = chat.title; setTextColor(Color.WHITE); textSize = 18f; typeface = Typeface.DEFAULT_BOLD })
+        box.addView(TextView(this).apply {
+            text = "Based on $count messages. Scroll up in the chat to let GAZ AI read more history."
+            setTextColor(0xFF8B94A3.toInt()); textSize = 12f; setPadding(0, dp(2), 0, dp(6))
+        })
+
+        // Tone chips
+        val tones = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (t in TONES) {
+            tones.addView(Button(this).apply {
+                text = t; isAllCaps = false; textSize = 12f; setTextColor(if (t == tone) Color.BLACK else Color.WHITE)
+                background = GradientDrawable().apply { setColor(if (t == tone) 0xFFFF7A1A.toInt() else 0xFF1B1F26.toInt()); cornerRadius = dp(16).toFloat() }
+                stateListAnimator = null; minWidth = 0; minimumWidth = 0; setPadding(dp(12), dp(4), dp(12), dp(4))
+                setOnClickListener { screenTone = t; cache = null; showScreenPanel(chatId) }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34)).apply { rightMargin = dp(6) })
+        }
+        box.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(tones) })
+
+        val status = TextView(this).apply { setTextColor(0xFF8B94A3.toInt()); textSize = 13f; setPadding(0, dp(8), 0, dp(4)) }
+        box.addView(status)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(list)
+
+        fun drawReplies(replies: List<String>) {
+            list.removeAllViews()
+            for (r in replies) {
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                row.addView(pill(r, 0xFF1B1F26.toInt()) { type(r, send = false) },
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                row.addView(pill("➤", 0xFFFF7A1A.toInt()) { type(r, send = true) }.apply { gravity = Gravity.CENTER; minWidth = dp(48) },
+                    LinearLayout.LayoutParams(dp(52), LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(6) })
+                list.addView(row, lp(6))
+            }
+            status.text = "Tap a reply to put it in the message box, or ➤ to send it."
+        }
+
+        val key = "$chatId|$count|$tone"
+        val cached = cache
+        if (cached != null && cached.first == key) drawReplies(cached.second)
+        else if (count == 0) status.text = "No messages read yet. Scroll the chat a little so GAZ AI can read it."
+        else if (!busy) {
+            busy = true
+            status.text = "Reading the chat and thinking ($tone)…"
+            Engine.generate(this, chatId, fromUser = true, tone = tone) { replies, err ->
+                busy = false
+                if (replies != null) { cache = key to replies; if (panel != null && Engine.screenChatId == chatId) drawReplies(replies) }
+                else status.text = err ?: "Something went wrong"
+            }
+        } else status.text = "Thinking…"
+
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun rlp() = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(6) }
+        row.addView(pill("New ideas", 0xFF2A303A.toInt()) { cache = null; showScreenPanel(chatId) }.apply { gravity = Gravity.CENTER }, rlp())
+        if (Engine.pending.isNotEmpty()) row.addView(pill("Waiting (${Engine.pending.size})", 0xFF2A303A.toInt()) { showWaiting = true; showPanel() }.apply { gravity = Gravity.CENTER }, rlp())
+        row.addView(pill("Close", 0xFF000000.toInt()) { hidePanel() }.apply { gravity = Gravity.CENTER }, rlp())
+        box.addView(row, lp(10))
+        attachPanel(box)
+    }
+
+    private fun type(text: String, send: Boolean) {
+        val sr = ScreenReader.instance
+        hidePanel()
+        if (sr == null || !sr.typeReply(text, send)) {
+            getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(android.content.ClipData.newPlainText("GAZ AI reply", text))
+            Toast.makeText(this, "Copied. Paste it in the message box.", Toast.LENGTH_LONG).show()
+        } else if (!send) {
+            Toast.makeText(this, "Reply placed in the message box. Check it, then tap Send.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun attachPanel(box: View) {
         val scroll = ScrollView(this).apply { addView(box) }
         val w = resources.displayMetrics.widthPixels
         val plp = WindowManager.LayoutParams(

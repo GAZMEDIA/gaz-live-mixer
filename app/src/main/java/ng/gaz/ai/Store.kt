@@ -121,6 +121,54 @@ class Db private constructor(ctx: Context) : SQLiteOpenHelper(ctx, "gazai.db", n
         return true
     }
 
+    /**
+     * Merge messages read from the screen into the saved history, keeping order:
+     * new lines at the bottom are appended, older lines found by scrolling up are put before.
+     */
+    @Synchronized
+    fun mergeScreen(chatId: String, seen: List<Msg>) {
+        if (seen.isEmpty()) return
+        val have = recent(chatId, 200)
+        fun same(a: Msg, b: Msg) = a.fromMe == b.fromMe && a.text == b.text
+        val now = System.currentTimeMillis()
+        val db = writableDatabase
+        fun ins(m: Msg, t: Long) = db.insert("msgs", null, ContentValues().apply {
+            put("chat_id", chatId); put("from_me", if (m.fromMe) 1 else 0); put("sender", m.sender); put("text", m.text); put("time", t)
+        })
+        if (have.isEmpty()) {
+            seen.forEachIndexed { i, m -> ins(m, now - (seen.size - i) * 1000L) }
+            return
+        }
+        // 1) screen starts with the end of what we have -> append the rest
+        for (k in minOf(have.size, seen.size) downTo 1) {
+            val tail = have.subList(have.size - k, have.size)
+            if ((0 until k).all { same(tail[it], seen[it]) }) {
+                val newOnes = seen.subList(k, seen.size)
+                newOnes.forEachIndexed { i, m -> ins(m, maxOf(now, have.last().time + 1) + i) }
+                return
+            }
+        }
+        // 2) screen ends with the start of what we have -> older history, put it before
+        for (k in minOf(have.size, seen.size) downTo 1) {
+            val head = have.subList(0, k)
+            val sTail = seen.subList(seen.size - k, seen.size)
+            if ((0 until k).all { same(head[it], sTail[it]) }) {
+                val older = seen.subList(0, seen.size - k)
+                val first = have.first().time
+                older.forEachIndexed { i, m -> ins(m, first - (older.size - i) * 1000L) }
+                return
+            }
+        }
+        // 3) no overlap: add lines we don't know yet at the end
+        val known = have.map { (if (it.fromMe) "1" else "0") + it.text }.toHashSet()
+        var t = maxOf(now, have.last().time + 1)
+        for (m in seen) if (known.add((if (m.fromMe) "1" else "0") + m.text)) ins(m, t++)
+    }
+
+    fun count(chatId: String): Int = readableDatabase.rawQuery(
+        "SELECT COUNT(*) FROM msgs WHERE chat_id=?", arrayOf(chatId)
+    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
     fun recent(chatId: String, n: Int = 20): List<Msg> = readableDatabase.rawQuery(
         "SELECT from_me,sender,text,time FROM msgs WHERE chat_id=? ORDER BY time DESC, id DESC LIMIT $n", arrayOf(chatId)
     ).use { c ->

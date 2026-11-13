@@ -27,8 +27,8 @@ jobs:
         with: { name: GAZ-AI, path: GAZ-AI.apk }
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: gaz-ai-v0.2.0
-          name: GAZ AI 0.2.0 (preview, floating bubble)
+          tag_name: gaz-ai-v0.3.0
+          name: GAZ AI 0.3.0 (preview: reads chat history)
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}

@@ -37,6 +37,16 @@
 
         <receiver android:name=".ActionReceiver" android:exported="false" />
 
+        <service android:name=".ScreenReader"
+            android:label="GAZ AI chat reader"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/screen_reader" />
+        </service>
+
         <service android:name=".FloatService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

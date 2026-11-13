@@ -32,6 +32,17 @@ object Engine {
     val pending = java.util.Collections.synchronizedMap(LinkedHashMap<String, List<String>>())
     var onPendingChanged: (() -> Unit)? = null
 
+    /** The chat currently open on screen (read by ScreenReader), or null. */
+    @Volatile var screenChatId: String? = null
+        private set
+    var onScreenChanged: (() -> Unit)? = null
+
+    fun setScreenChat(chatId: String?) {
+        val changed = chatId != screenChatId
+        screenChatId = chatId
+        if (changed) main.post { onScreenChanged?.invoke() }
+    }
+
     private fun pendingChanged() = main.post { onPendingChanged?.invoke() }
 
     fun dismissPending(ctx: Context, chatId: String) {
@@ -89,7 +100,7 @@ object Engine {
             val chat = Db.get(app).chat(chatId) ?: return@execute
             val mode = effectiveMode(app, chat)
             if (!fromUser && (mode == "off" || !Prefs.bool(app, Prefs.ENABLED, true))) return@execute
-            val history = Db.get(app).recent(chatId, 20)
+            val history = Db.get(app).recent(chatId, if (fromUser) 40 else 25)
             if (history.isEmpty()) return@execute
             try {
                 val replies = Brain.suggest(app, chat, history, tone ?: effectiveTone(app, chat))
