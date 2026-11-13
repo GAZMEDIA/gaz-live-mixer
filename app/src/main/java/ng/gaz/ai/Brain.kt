@@ -77,7 +77,6 @@ object Brain {
     private fun gemini(ctx: Context, system: String, user: String): String {
         val key = Prefs.str(ctx, Prefs.API_KEY).trim().trim('"', '\'')
         if (key.isEmpty()) throw BrainError("Add your free Gemini API key: tap \"Get a free key\", copy it and paste it in GAZ AI.")
-        if (!key.startsWith("AIza")) throw BrainError("That doesn't look like a Gemini API key. It should start with \"AIza\". Copy it again from Google AI Studio.")
         val model = Prefs.str(ctx, Prefs.MODEL, Prefs.DEFAULT_MODEL).trim().ifEmpty { Prefs.DEFAULT_MODEL }
         return try {
             geminiCall(key, model, system, user)
@@ -122,7 +121,7 @@ object Brain {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/" +
             URLEncoder.encode(model, "UTF-8") + ":generateContent?key=" + URLEncoder.encode(key, "UTF-8")
         val (code, text) = post(url, body.toString(), 30_000)
-        if (code == 400 && text.contains("API_KEY_INVALID")) throw BrainError("Google says your Gemini API key is not valid. Create a new key in Google AI Studio and paste it again.")
+        if (code == 400 && text.contains("API_KEY_INVALID")) throw BrainError("Google says your Gemini API key is not valid. Copy the whole key again from aistudio.google.com/apikey (Gemini keys usually start with \"AIza\") and paste it in GAZ AI.")
         if (code == 404 || (code == 400 && text.contains("model", ignoreCase = true) && text.contains("not", ignoreCase = true) && text.contains("found", ignoreCase = true))) throw ModelMissing()
         if (code == 403) throw BrainError("Google refused the key (403): " + errMsg(text) + ". Make sure the key is from aistudio.google.com/apikey.")
         if (code == 400 && text.contains("location", ignoreCase = true)) throw BrainError("Gemini isn't available from your current network location: " + errMsg(text))
