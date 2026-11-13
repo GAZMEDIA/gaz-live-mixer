@@ -27,8 +27,8 @@ jobs:
         with: { name: GAZ-AI, path: GAZ-AI.apk }
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: gaz-ai-v0.3.1
-          name: "GAZ AI 0.3.1 (preview, reads chat history, Gemini auto-setup)"
+          tag_name: gaz-ai-v0.3.2
+          name: "GAZ AI 0.3.2 (preview, auto-retry when Gemini is busy)"
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}

@@ -79,16 +79,37 @@ object Brain {
         if (key.isEmpty()) throw BrainError("Add your free Gemini API key: tap \"Get a free key\", copy it and paste it in GAZ AI.")
         val model = Prefs.str(ctx, Prefs.MODEL, Prefs.DEFAULT_MODEL).trim().ifEmpty { Prefs.DEFAULT_MODEL }
         return try {
-            geminiCall(key, model, system, user)
+            withRetry(key, model, system, user)
         } catch (e: ModelMissing) {
             // The model name was retired or isn't available for this key: find one that works and remember it
             val better = pickModel(key) ?: throw BrainError("No Gemini model is available for your key right now. Try again later.")
             Prefs.putStr(ctx, Prefs.MODEL, better)
-            geminiCall(key, better, system, user)
+            withRetry(key, better, system, user)
         }
     }
 
     private class ModelMissing : Exception()
+    private class Busy(val code: Int) : Exception()
+
+    /** Free Gemini is sometimes busy (503/500/429): wait and retry, then try lighter models. */
+    private fun withRetry(key: String, model: String, system: String, user: String): String {
+        val models = listOf(model, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite").distinct()
+        var lastCode = 503
+        for ((i, m) in models.withIndex()) {
+            for (attempt in 0 until (if (i == 0) 3 else 1)) {
+                try {
+                    return geminiCall(key, m, system, user)
+                } catch (b: Busy) {
+                    lastCode = b.code
+                    Thread.sleep(1500L * (attempt + 1))
+                } catch (mm: ModelMissing) {
+                    if (i == 0) throw mm else break      // fallback name not available: try the next one
+                }
+            }
+        }
+        throw BrainError(if (lastCode == 429) "Gemini free limit reached for now. Wait a minute and try again."
+            else "Google's free Gemini servers are busy right now (error $lastCode). Try again in a minute.")
+    }
 
     /** Ask Google which models this key can use and pick a fast, free one. */
     private fun pickModel(key: String): String? {
@@ -125,7 +146,7 @@ object Brain {
         if (code == 404 || (code == 400 && text.contains("model", ignoreCase = true) && text.contains("not", ignoreCase = true) && text.contains("found", ignoreCase = true))) throw ModelMissing()
         if (code == 403) throw BrainError("Google refused the key (403): " + errMsg(text) + ". Make sure the key is from aistudio.google.com/apikey.")
         if (code == 400 && text.contains("location", ignoreCase = true)) throw BrainError("Gemini isn't available from your current network location: " + errMsg(text))
-        if (code == 429) throw BrainError("Gemini free limit reached for now. Wait a minute and try again.")
+        if (code == 429 || code == 500 || code == 502 || code == 503 || code == 504) throw Busy(code)
         if (code !in 200..299) throw BrainError("Gemini error $code: " + errMsg(text))
         val j = JSONObject(text)
         val cands = j.optJSONArray("candidates") ?: throw BrainError("Gemini gave no answer (it may have blocked the message).")
