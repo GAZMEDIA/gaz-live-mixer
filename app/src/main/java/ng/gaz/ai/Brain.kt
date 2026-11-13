@@ -75,9 +75,46 @@ object Brain {
     }
 
     private fun gemini(ctx: Context, system: String, user: String): String {
-        val key = Prefs.str(ctx, Prefs.API_KEY).trim()
-        if (key.isEmpty()) throw BrainError("Add your free Gemini API key in GAZ AI settings.")
+        val key = Prefs.str(ctx, Prefs.API_KEY).trim().trim('"', '\'')
+        if (key.isEmpty()) throw BrainError("Add your free Gemini API key: tap \"Get a free key\", copy it and paste it in GAZ AI.")
+        if (!key.startsWith("AIza")) throw BrainError("That doesn't look like a Gemini API key. It should start with \"AIza\". Copy it again from Google AI Studio.")
         val model = Prefs.str(ctx, Prefs.MODEL, Prefs.DEFAULT_MODEL).trim().ifEmpty { Prefs.DEFAULT_MODEL }
+        return try {
+            geminiCall(key, model, system, user)
+        } catch (e: ModelMissing) {
+            // The model name was retired or isn't available for this key: find one that works and remember it
+            val better = pickModel(key) ?: throw BrainError("No Gemini model is available for your key right now. Try again later.")
+            Prefs.putStr(ctx, Prefs.MODEL, better)
+            geminiCall(key, better, system, user)
+        }
+    }
+
+    private class ModelMissing : Exception()
+
+    /** Ask Google which models this key can use and pick a fast, free one. */
+    private fun pickModel(key: String): String? {
+        val c = URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=" + URLEncoder.encode(key, "UTF-8"))
+            .openConnection() as HttpURLConnection
+        val text = try {
+            c.connectTimeout = 15_000; c.readTimeout = 20_000
+            if (c.responseCode !in 200..299) return null
+            c.inputStream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) { return null } finally { c.disconnect() }
+        val arr = JSONObject(text).optJSONArray("models") ?: return null
+        val usable = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { m ->
+            val methods = m.optJSONArray("supportedGenerationMethods")
+            methods != null && (0 until methods.length()).any { methods.getString(it) == "generateContent" }
+        }.map { it.getString("name").removePrefix("models/") }
+            .filter { it.startsWith("gemini") && listOf("image", "tts", "audio", "live", "embedding", "vision").none { bad -> it.contains(bad) } }
+        fun version(n: String) = Regex("""gemini-(\d+(?:\.\d+)?)""").find(n)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+        val stable = usable.filter { !it.contains("preview") && !it.contains("exp") }
+        val pool = stable.ifEmpty { usable }
+        return pool.filter { it.contains("flash") && !it.contains("lite") }.maxByOrNull { version(it) }
+            ?: pool.filter { it.contains("flash") }.maxByOrNull { version(it) }
+            ?: pool.maxByOrNull { version(it) }
+    }
+
+    private fun geminiCall(key: String, model: String, system: String, user: String): String {
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", user)))))
@@ -85,8 +122,10 @@ object Brain {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/" +
             URLEncoder.encode(model, "UTF-8") + ":generateContent?key=" + URLEncoder.encode(key, "UTF-8")
         val (code, text) = post(url, body.toString(), 30_000)
-        if (code == 400 && text.contains("API_KEY_INVALID")) throw BrainError("Your Gemini API key is not valid. Check it in settings.")
-        if (code == 404) throw BrainError("Gemini model \"$model\" not found. Change the model name in settings (e.g. gemini-2.5-flash).")
+        if (code == 400 && text.contains("API_KEY_INVALID")) throw BrainError("Google says your Gemini API key is not valid. Create a new key in Google AI Studio and paste it again.")
+        if (code == 404 || (code == 400 && text.contains("model", ignoreCase = true) && text.contains("not", ignoreCase = true) && text.contains("found", ignoreCase = true))) throw ModelMissing()
+        if (code == 403) throw BrainError("Google refused the key (403): " + errMsg(text) + ". Make sure the key is from aistudio.google.com/apikey.")
+        if (code == 400 && text.contains("location", ignoreCase = true)) throw BrainError("Gemini isn't available from your current network location: " + errMsg(text))
         if (code == 429) throw BrainError("Gemini free limit reached for now. Wait a minute and try again.")
         if (code !in 200..299) throw BrainError("Gemini error $code: " + errMsg(text))
         val j = JSONObject(text)
