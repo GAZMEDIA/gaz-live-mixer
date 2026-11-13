@@ -18,12 +18,17 @@ jobs:
       - name: Build APK
         run: gradle assembleRelease --no-daemon
       - run: cp app/build/outputs/apk/release/app-release.apk GAZ-AI.apk
+      - name: Verify APK
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/apksigner verify --verbose GAZ-AI.apk | head -8
+          $BT/aapt dump badging GAZ-AI.apk | grep -E "package:|sdkVersion|targetSdkVersion|testOnly|native-code" || true
       - uses: actions/upload-artifact@v4
         with: { name: GAZ-AI, path: GAZ-AI.apk }
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: gaz-ai-v0.1.0
-          name: GAZ AI 0.1.0 (preview)
+          tag_name: gaz-ai-v0.2.0
+          name: GAZ AI 0.2.0 (preview, floating bubble)
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}

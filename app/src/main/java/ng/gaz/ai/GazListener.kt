@@ -17,6 +17,7 @@ class GazListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Engine.channels(this)
+        if (Prefs.bool(this, "bubble", false)) FloatService.start(this)
         // Pick up chats that already have notifications showing
         runCatching { activeNotifications?.forEach { handle(it, triggerAi = false) } }
     }

@@ -28,6 +28,18 @@ object Engine {
     private val pendingAuto = ConcurrentHashMap<String, Runnable>()
     private val pendingAutoText = ConcurrentHashMap<String, String>()
 
+    /** Chats with replies waiting for you (shown on the floating bubble). Newest last. */
+    val pending = java.util.Collections.synchronizedMap(LinkedHashMap<String, List<String>>())
+    var onPendingChanged: (() -> Unit)? = null
+
+    private fun pendingChanged() = main.post { onPendingChanged?.invoke() }
+
+    fun dismissPending(ctx: Context, chatId: String) {
+        pending.remove(chatId)
+        ctx.getSystemService(NotificationManager::class.java).cancel(notifId(chatId))
+        pendingChanged()
+    }
+
     const val CH_SUGGEST = "suggestions"
     const val CH_AUTO = "auto"
     const val CH_STATUS = "status"
@@ -109,6 +121,8 @@ object Engine {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
     fun showSuggestions(ctx: Context, chat: Chat, replies: List<String>) {
+        if (replies.isEmpty()) return
+        pending.remove(chat.id); pending[chat.id] = replies; pendingChanged()
         val id = notifId(chat.id)
         val last = Db.get(ctx).recent(chat.id, 1).lastOrNull()?.text ?: chat.lastText
         val text = StringBuilder("${chat.title}: $last\n")
@@ -192,6 +206,7 @@ object Engine {
             Db.get(ctx).addMsg(chatId, Msg(true, if (auto) "GAZ AI" else "me", text, System.currentTimeMillis()))
             Db.get(ctx).setSuggestions(chatId, emptyList())
             ctx.getSystemService(NotificationManager::class.java).cancel(notifId(chatId))
+            pending.remove(chatId); pendingChanged()
             true
         } catch (e: Exception) {
             replyActions.remove(chatId)

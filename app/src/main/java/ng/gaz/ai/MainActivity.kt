@@ -50,6 +50,15 @@ class MainActivity : Activity() {
         root.addView(switch("GAZ AI is on", Prefs.bool(this, Prefs.ENABLED, true)) {
             Prefs.putBool(this, Prefs.ENABLED, it)
         }, lp(top = 8))
+        root.addView(switch("Floating bubble (shows replies over any app)", Prefs.bool(this, "bubble", false)) { on ->
+            Prefs.putBool(this, "bubble", on)
+            if (on) {
+                if (!Settings.canDrawOverlays(this)) {
+                    Toast.makeText(this, "Allow \"Display over other apps\" for GAZ AI, then come back", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                } else FloatService.start(this)
+            } else FloatService.stop(this)
+        })
 
         // ---------------- Chats
         root.addView(section("Your chats"))
@@ -129,6 +138,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (Prefs.bool(this, "bubble", false) && Settings.canDrawOverlays(this)) FloatService.start(this)
         refreshStatus()
         refreshChats()
     }
